@@ -1,0 +1,84 @@
+---
+title: "Model data assembly for morhpological dataset (128 sites)"
+format: docx
+editor: visual
+---
+
+```{r setup}
+#| echo: false
+#| message: false
+#| warning: false
+
+requiredPackages <- c("readxl","tidyverse", "DBI")
+lapply(requiredPackages, FUN = require, character.only = TRUE)
+source("https://tools.thewerg.unimelb.edu.au/documents/misc/bugDatabaseFunctions.R")
+source("https://tools.thewerg.unimelb.edu.au/data/mwstr_v13/mwstr_network_functions.R")
+```
+
+## Introduction
+
+This document records the preparation of input data for Bayesian analysis macroinvertebrate assemblage composition in 128 sites across the Melbourne region, sampled in Spring 2021.
+
+```{r}
+# Open record of Spring 2021 samples source file.
+field_s21 <- as.data.frame(
+  readxl::read_excel("~/uomShare/wergData/DNA_Barcoding/DNA barcoding samples processing Spr2021.xlsx"),
+  stringsAsfactors = FALSE)
+#check nrows # nrow(field_s21) # 140
+
+# Restrict to those sites from which 4 samples were taken.
+field_s21 <- field_s21[field_s21$total == 4,]
+#check nrows now # nrow(field_s21) # reduced to 129
+
+# Sitecode mix-up in field_s21 (Confusion which site is correct: they are very close and can be considered equivalent I think)
+field_s21$sitecode[field_s21$sitecode == "STV-2279-4"] <- "STV-3149-0"
+# retain the original sample_code values for matching with the DNA data, and
+# create a corrected sample_code field (smpcode) to match the database values
+field_s21$orig_sample_code <- field_s21$sample_code
+field_s21$smpcode <- gsub("STV-2279-4","STV-2279-5",field_s21$sample_code)
+
+# Make a connection to the database and open the samples table
+db_mwbugs <- RPostgres::dbConnect(drv = RPostgres::Postgres(),
+                                     dbname = "mwbugs", host = "localhost", port = 5432,
+                                     user = "readonly", password = "reachcode_42")
+samples <- DBI::dbReadTable(db_mwbugs, "samples")
+# And reduce to spring 2021 (could have done this as an SQL query too, of course)
+samples_s21 <- samples[samples$date > "2021-07-01" & samples$date < "2021-12-31",]
+samples_s21$reach <- substr(samples_s21$sitecode,1,nchar(samples_s21$sitecode)-2)
+
+# check that each site in field_s21 has a matching pair of samples in the database.
+# find and correct sitecodes in the field_s21 table are reaches rather than sitecodes,
+for(i in 1:nrow(field_s21)){
+  # Note data for JKS-470-7 is missing from the database. I've asked Zac to check and resuppply
+  if(field_s21$sitecode[i] %in% samples_s21$sitecode | field_s21$sitecode[i] == "JKS-470-7"){
+    field_s21$reach[i] <- substr(samples$sitecode[i],1,nchar(samples$sitecode[i])-2)
+  } else {
+    if(field_s21$sitecode[i] %in% samples_s21$reach){
+      field_s21$reach[i] <- field_s21$sitecode[i]
+      field_s21$sitecode[i] <- unique(samples_s21$sitecode[samples_s21$reach == field_s21$sitecode[i]])
+  } else {
+    stop()  # I used this so that the loop would stop when it struck a mismatch
+    # the STV and JKS corrections above were made as a result of this step.
+  }
+  }
+}
+
+sample_lookup <- field_s21[,c("smpcode","sitecode","Extraction name")]
+names(sample_lookup)[3] <- "extract_code"
+
+samples <- samples[samples$sitecode %in% sample_lookup$sitecode,]
+# check number of rows# nrow(samples)  #256, = 2 * 128 so two samples missing...
+# sample_lookup$sitecode[!sample_lookup$sitecode %in% samples$sitecode] #"JKS-470-7"
+# sample data not provided by GHD. Request has been sent to Zac....
+# Proceed with 128 for now (and rerun this script when JKS data is delivered)
+
+biota <- DBI::dbReadTable(db_mwbugs,"biota")
+biota <- biota[biota$smpcode %in% samples$smpcode,]
+
+
+```
+
+```{r}
+#| echo: false
+2 * 2
+```
