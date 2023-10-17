@@ -19,6 +19,9 @@ source("https://tools.thewerg.unimelb.edu.au/data/mwstr_v13/mwstr_network_functi
 
 This document records the preparation of input data for Bayesian analysis macroinvertebrate assemblage composition in 128 sites across the Melbourne region, sampled in Spring 2021.
 
+### Environmental predictors
+
+
 ```{r}
 # Open record of Spring 2021 samples source file.
 field_s21 <- as.data.frame(
@@ -38,9 +41,8 @@ field_s21$orig_sample_code <- field_s21$sample_code
 field_s21$smpcode <- gsub("STV-2279-4","STV-2279-5",field_s21$sample_code)
 
 # Make a connection to the database and open the samples table
-db_mwbugs <- RPostgres::dbConnect(drv = RPostgres::Postgres(),
-                                     dbname = "mwbugs", host = "localhost", port = 5432,
-                                     user = "readonly", password = "reachcode_42")
+db_mwstr <- RPostgres::dbConnect(RPostgres::Postgres(), "mwstr", host = "localhost", port = 5432, user = "readonly", password = "reachcode_42")
+db_mwbugs <- RPostgres::dbConnect(drv = RPostgres::Postgres(), dbname = "mwbugs", host = "localhost", port = 5432, user = "readonly", password = "reachcode_42")
 samples <- DBI::dbReadTable(db_mwbugs, "samples")
 # And reduce to spring 2021 (could have done this as an SQL query too, of course)
 samples_s21 <- samples[samples$date > "2021-07-01" & samples$date < "2021-12-31",]
@@ -66,6 +68,10 @@ for(i in 1:nrow(field_s21)){
 sample_lookup <- field_s21[,c("smpcode","sitecode","Extraction name")]
 names(sample_lookup)[3] <- "extract_code"
 
+sites <- sf::st_read(db_mwbugs,"sites")
+sites <- sites[sites$sitecode %in% sample_lookup$sitecode,]
+# check number of rows # nrow(sites)  #129, which is the number of expected sites
+
 samples <- samples[samples$sitecode %in% sample_lookup$sitecode,]
 # check number of rows# nrow(samples)  #256, = 2 * 128 so two samples missing...
 # sample_lookup$sitecode[!sample_lookup$sitecode %in% samples$sitecode] #"JKS-470-7"
@@ -75,10 +81,47 @@ samples <- samples[samples$sitecode %in% sample_lookup$sitecode,]
 biota <- DBI::dbReadTable(db_mwbugs,"biota")
 biota <- biota[biota$smpcode %in% samples$smpcode,]
 
+# Read env and site data:
+sites_env <- DBI::dbGetQuery(db_mwstr, "SELECT cat_env.site, cat_env.reach, cat_env.ei_2022, cat_env.af_2022, cat_env.meanq_mm, subcs.carea_km2, cat_env.dor FROM cat_env JOIN subcs ON cat_env.site = subcs.site")
+names(sites_env) <- c("site","reach_v12","AI","AF_r","meanq","carea", "dor")
+
+sites <- merge(sites, sites_env, by = "reach_v12")
+
+# Recalculate log10-transformed predictors
+sites$lai <- log10(sites$AI*100 + 0.01)
+sites$lmeanq <- log10(sites$meanq)
+sites$lcarea <- log10(sites$carea)
+sites$ldor <- log10(sites$dor*100 + 0.01) # not sure if appropriate, but it helps the spread of data
+
+rm(sites_env)
+sites1 <- sites
+
+# Recalculate AF by site (rather than reach - see https://shiny-water.science.unimelb.edu.au/mwstr_manual/c6-trees.html for explanation and calculations)
+sites$AF <- NA
+af_data <- prepare_af_site_data(db_mwstr, "/servers/shiny-server/data/mwstr_v13") # takes ~ 2 min
+system.time(
+  for(i in 1:nrow(sites)){
+  sites$AF[i] <- af_site(sites$reach_v12[i], af_data)[4]   # third element is af_2018
+  }
+) # ~ 16 mins
+
+# disconnect databases:
+DBI::dbDisconnect(db_mwstr)
+DBI::dbDisconnect(db_mwbugs)
 
 ```
+
+### Collinearity between predictors
 
 ```{r}
-#| echo: false
-2 * 2
+
+sites_pairs <- as.data.frame(sites[,c("lai", "AF", "lmeanq", "lcarea", "dor")])[,1:5]
+#sites_pairs
+pairs(sites_pairs)
+
+
+
 ```
+
+### Assemble 'biota' into dataset
+
