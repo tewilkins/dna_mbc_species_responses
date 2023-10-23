@@ -1,5 +1,5 @@
 ---
-title: "Model data assembly for morhpological dataset (128 sites)"
+title: "Model data assembly for morhpological dataset (129 sites)"
 format: docx
 editor: visual
 ---
@@ -13,6 +13,7 @@ requiredPackages <- c("readxl","tidyverse", "DBI")
 lapply(requiredPackages, FUN = require, character.only = TRUE)
 source("https://tools.thewerg.unimelb.edu.au/documents/misc/bugDatabaseFunctions.R")
 source("https://tools.thewerg.unimelb.edu.au/data/mwstr_v13/mwstr_network_functions.R")
+wd <- "~/uomShare/wergStaff/tewilkins/morph_taxa_129_sites/data/"
 ```
 
 ## Introduction
@@ -103,7 +104,7 @@ system.time(
   for(i in 1:nrow(sites)){
   sites$AF[i] <- af_site(sites$reach_v12[i], af_data)[4]   # third element is af_2018
   }
-) # ~ 16 mins
+) # ~ 17 mins
 
 # disconnect databases:
 DBI::dbDisconnect(db_mwstr)
@@ -119,9 +120,24 @@ sites_pairs <- as.data.frame(sites[,c("lai", "AF", "lmeanq", "lcarea", "dor")])[
 #sites_pairs
 pairs(sites_pairs)
 
+```
+
+### Taxonomic decisions
+
+
+
+### Assemble 'biota' into dataset
+
+```{r}
+
+WriteXLS::WriteXLS(list(sites = sites, 
+                        samples = samples_s21,
+                        biota_morph = biota),
+                  paste0(wd,"biota_for_models.xlsx"))
 
 
 ```
 
-### Assemble 'biota' into dataset
+
+
 

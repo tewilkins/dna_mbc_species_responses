@@ -1,0 +1,172 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+library(cmdstanr)
+install_cmdstan()
+check_cmdstan_toolchain(fix = TRUE, quiet = TRUE)
+rand_seed = 9430572
+
+#Include sqlQuery() and ct() functions
+# source("code/misc_functions.R")
+source("https://tools.thewerg.unimelb.edu.au/documents/misc/bugDatabaseFunctions.R")
+wd <- "~/uomShare/wergStaff/tewilkins/morph_taxa_129_sites/data/"
+mod_obj_dir <- "~/uomShare/wergStaff/tewilkins/morph_taxa_129_sites/model_objects/"
+
+```
+
+```{r}
+#| label: data_prep
+#| eval: false
+# NOTE THIS CHUNK is run below by sourcing its content at "compile_model_data.R"
+
+# Import sites, samples, and biota tables as a list
+data_list <- rio::import_list(paste0(wd,"biota_for_models.xlsx"))
+# Convert each table in data_list into a data.frame.
+list2env(data_list,globalenv())
+
+# sort samples list by sitecode (for ease of indexing/checking)
+samples <- samples[order(samples$sitecode),]
+# assign site_nos to sitecodes, and match to sample table
+sites$site_no <- 1:nrow(sites)
+samples$site_no <- sites$site_no[match(samples$sitecode,sites$sitecode)]
+
+# scale the predictor variables
+# keeping them as scaled objects for ease of back-transforming later
+I <- scale(sites$lai)
+F <- scale(sites$AF)
+Q <- scale(sites$lmeanq)
+C <- scale(sites$lcarea)
+D <- scale(sites$ldor)
+
+#### samples table for morph samples 
+samples_morph <- samples[samples$smpcode %in% unique(biota_morph$smpcode),]
+
+#### predictor matrix u for morph samples
+I_morph <- as.vector(I)[match(samples_morph$sitecode, sites$sitecode)]
+F_morph <- as.vector(F)[match(samples_morph$sitecode, sites$sitecode)]
+Q_morph <- as.vector(Q)[match(samples_morph$sitecode, sites$sitecode)]
+C_morph <- as.vector(C)[match(samples_morph$sitecode, sites$sitecode)]
+D_morph <- as.vector(D)[match(samples_morph$sitecode, sites$sitecode)]
+hab <- as.numeric(samples_morph$collection_method == "RBA edge (sweep)") 
+u_morph <- cbind(rep(1,nrow(samples_morph)),  # General intercept
+           I_morph,                 # Effective imperviousness
+           F_morph,                 # Attenuated Forest cover
+           I_morph * F_morph,       # Interaction betwen I and F
+           Q_morph,                 # mean annual runoff depth
+           Q_morph^2,               # square of Q for modal response
+           C_morph,                 # catchment area
+           D_morph,                 # flow stress
+           hab)                     # habitat (1 = edge, 0 = riffle)
+
+#### count matrix for morph_ab model
+# check all counts are integers sum(biota_morph_ab$count %% 1 > 0) # 0, all good
+ab_morph <- with(biota_morph, ct(smpcode, taxoncode, count))
+# ensure c and u rows are ordered the same way
+ab_morph <- ab_morph[match(samples_morph$smpcode,row.names(ab_morph)),]
+
+#### presence_absence matrix for morph samples 
+pa_morph <- ab_morph
+pa_morph[pa_morph > 0] <- 1
+
+#### subsample fraction matrix (applies to both c_morph_ab and pa_morph)
+s_morph <- pa_morph
+for(i in 1:nrow(s_morph)){
+  s_morph[i,] <- samples_morph$subsample_perc[samples_morph$smpcode == 
+                                                row.names(s_morph)[i]]/100
+}
+# adjust coarsepick subsample fractions to 1
+coarsepicks <- biota_morph[biota_morph$coarsepick == 1,]
+for(i in 1:nrow(coarsepicks)){
+  s_morph[row.names(s_morph) == coarsepicks$smpcode[i],
+          coarsepicks$taxoncode[i]] <- 1
+}
+
+ab_morph_data <- list(n_obs = nrow(ab_morph), # no. samples
+                    n_pred = ncol(u_morph),       # no. predictors
+                    n_taxa = ncol(ab_morph),  # no. taxa
+                    n_site = nrow(sites),       # no. sites
+                    u = as.matrix(u_morph),       # predictor model matrix
+                    c = as.matrix(ab_morph), # taxa pa matrix
+                    s = as.matrix(s_morph),  # subsample proportion for each obs
+                    site = samples_morph$site_no) # site number for each obs
+
+pa_morph_data <- list(n_obs = nrow(pa_morph), # no. samples
+                    n_pred = ncol(u_morph),       # no. predictors
+                    n_taxa = ncol(pa_morph),  # no. taxa
+                    n_site = nrow(sites),       # no. sites
+                    u = as.matrix(u_morph),       # predictor model matrix
+                    pa = as.matrix(pa_morph), # taxa pa matrix
+                    s = as.matrix(s_morph),  # subsample proportion for each obs
+                    site = samples_morph$site_no) # site number for each obs
+
+
+```
+
+```{r}
+
+
+# Compile the abundance (negative-binomial) Stan model
+mod_ab <- cmdstan_model("nbinom_fixedmatrix_sse.stan", pedantic = TRUE)
+# Compile the presence-absence (binomial) Stan model
+mod_pa <- cmdstan_model("binom_fixedmatrix_sse.stan", pedantic = TRUE)
+
+
+nc <- 4 #Number of chains
+#### 1. Morphologically id-ed, family-level abundance model
+system.time(
+ab_morph_fit <- mod_ab$sample(data = ab_morph_data, seed = rand_seed,
+                         chains = nc, parallel_chains = nc,
+                         iter_warmup = 1000, iter_sampling = 1000, # should be set 1000 and 3000 respectively
+                         adapt_delta = 0.95, # with default adapt-delta, 
+                         # there was 1 divergence and bulk ESS was less than 400
+                         refresh = 0.05*1000)
+) # ~33 mins
+ab_morph_fit$save_output_files(
+  dir = mod_obj_dir,
+  basename = "ab_morph_fit",timestamp = FALSE,random = FALSE)
+
+ab_morph_fit$sampler_diagnostics()
+saveRDS(ab_morph_fit, file = paste0(mod_obj_fit, "ab_morph_fit.rds"))
+ab_morph_fit$diagnostic_summary()
+# $ebfmi [1] 0.6105491 0.5611131 0.6091483 0.5443548
+system.time(ab_morph_fit_summary <- ab_morph_fit$summary()) # ~7.5 mins
+write.csv(ab_morph_fit_summary, "/mnt/uomShare/wergStaff/ChrisW/git-data/species_response_46_sites/model_objects/c_morph_ab_fit_summary.csv", row.names = FALSE)
+min(ab_morph_fit_summary$ess_bulk,na.rm=TRUE) # 226.3449
+min(ab_morph_fit_summary$ess_tail,na.rm=TRUE) # 349.3935
+max(ab_morph_fit_summary$rhat,na.rm=TRUE)  # 1.020237
+# all diagnostic_summary statistics were fine , although 1 divergence suggest perhaps a slightly higher adapt-delta?
+# But could set iterations to 1000 + ~2000 to achieve min ESS of 400.
+
+#### 2. Morphologically id-ed, family-level presence_absence model
+system.time(
+pa_morph_fit <- mod_pa$sample(data = pa_morph_data, seed = rand_seed,
+                         chains = nc, parallel_chains = nc,
+                         iter_warmup = 1000, iter_sampling = 1000, # should be 1000 and 3000 respectively
+                         refresh = 0.05*2000)
+) # ~17.5 mins
+pa_morph_fit$save_output_files(
+  dir = mod_obj_dir,
+  basename = "pa_morph_fit",timestamp = FALSE,random = FALSE)
+
+pa_morph_fit$sampler_diagnostics()
+saveRDS(pa_morph_fit, file = paste0(mod_obj_dir, "pa_morph_fit.rds"))
+pa_morph_fit$diagnostic_summary()
+# $ebfmi [1] 0.7346261 0.7531385 0.7389972 0.7908420
+pa_morph_fit_summary <- pa_morph_fit$summary()
+write.csv(pa_morph_fit_summary, paste0(mod_obj_dir, "pa_morph_fit_summary.csv"), row.names = FALSE)
+min(pa_morph_fit_summary$ess_bulk,na.rm=TRUE) # 193.06
+min(pa_morph_fit_summary$ess_tail,na.rm=TRUE) # 359.78
+max(pa_morph_fit_summary$rhat,na.rm=TRUE)  # 1.021
+# all diagnostic_summary statistics were fine
+# As above, could set iterations to 1000 + ~2200 to achieve min ESS of 400.
+
+
+```
