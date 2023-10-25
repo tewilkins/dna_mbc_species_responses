@@ -112,7 +112,6 @@ pa_morph_data <- list(n_obs = nrow(pa_morph), # no. samples
 
 ```{r}
 
-
 # Compile the abundance (negative-binomial) Stan model
 mod_ab <- cmdstan_model("nbinom_fixedmatrix_sse.stan", pedantic = TRUE)
 # Compile the presence-absence (binomial) Stan model
@@ -124,10 +123,10 @@ nc <- 4 #Number of chains
 system.time(
 ab_morph_fit <- mod_ab$sample(data = ab_morph_data, seed = rand_seed,
                          chains = nc, parallel_chains = nc,
-                         iter_warmup = 1000, iter_sampling = 1000, # should be set 1000 and 3000 respectively
-                         adapt_delta = 0.95, # with default adapt-delta, 
+                         iter_warmup = 100, iter_sampling = 100, # should be set 1000 and 3000 respectively
+                         adapt_delta = 0.8, # with default adapt-delta, 
                          # there was 1 divergence and bulk ESS was less than 400
-                         refresh = 0.05*1000)
+                         refresh = 10)
 ) # ~33 mins
 ab_morph_fit$save_output_files(
   dir = mod_obj_dir,
@@ -151,7 +150,7 @@ pa_morph_fit <- mod_pa$sample(data = pa_morph_data, seed = rand_seed,
                          chains = nc, parallel_chains = nc,
                          iter_warmup = 1000, iter_sampling = 1000, # should be 1000 and 3000 respectively
                          refresh = 0.05*2000)
-) # ~17.5 mins
+) # ~21 hours
 pa_morph_fit$save_output_files(
   dir = mod_obj_dir,
   basename = "pa_morph_fit",timestamp = FALSE,random = FALSE)
