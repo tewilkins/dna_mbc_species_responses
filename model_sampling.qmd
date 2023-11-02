@@ -10,7 +10,6 @@ editor: visual
 #| warning: false
 
 library(cmdstanr)
-install_cmdstan()
 check_cmdstan_toolchain(fix = TRUE, quiet = TRUE)
 rand_seed = 9430572
 
@@ -157,15 +156,48 @@ pa_morph_fit$save_output_files(
 
 pa_morph_fit$sampler_diagnostics()
 saveRDS(pa_morph_fit, file = paste0(mod_obj_dir, "pa_morph_fit.rds"))
+
+pa_morph_fit <- readRDS(paste0(mod_obj_dir,"pa_morph_fit.rds"))
+
+mod_pa_params <- c(names(mod_pa$variables()$parameters), "lp__")
+mod_ab_params <- names(mod_ab$variables()$parameters)
+
 pa_morph_fit$diagnostic_summary()
-# $ebfmi [1] 0.7346261 0.7531385 0.7389972 0.7908420
-pa_morph_fit_summary <- pa_morph_fit$summary()
+# $ebfmi [1] 0.5980283 0.6045529 0.4500194 0.7070027
+
+pa_morph_fit_summlist1 <- list()
+pa_morph_fit_summlist2 <- list()
+
+system.time(
+  foreach(i = 1:length(mod_pa_params)) %do% {
+    temp <- pa_morph_fit$summary(variables = mod_pa_params[i], "ess_bulk", "ess_tail", "rhat")
+    pa_morph_fit_summlist1[[i]] <- temp
+    gc()
+  }
+) # about 4.8 hours
+#     user   system  elapsed 
+# 10259.70  1167.15 17416.35
+
+system.time(
+  for (var in 1:length(mod_pa_params)){
+    temp <- pa_morph_fit$summary(variables = mod_pa_params[var], "ess_bulk", "ess_tail", "rhat")
+    pa_morph_fit_summlist2[[var]] <- temp
+    gc()
+}) # about 1.5 hours
+#     user   system  elapsed 
+# 5761.933   41.241 5783.771
+
+pa_morph_fit_summary <- do.call("rbind", pa_morph_fit_summlist2)
+
 write.csv(pa_morph_fit_summary, paste0(mod_obj_dir, "pa_morph_fit_summary.csv"), row.names = FALSE)
-min(pa_morph_fit_summary$ess_bulk,na.rm=TRUE) # 193.06
-min(pa_morph_fit_summary$ess_tail,na.rm=TRUE) # 359.78
-max(pa_morph_fit_summary$rhat,na.rm=TRUE)  # 1.021
+min(pa_morph_fit_summary$ess_bulk,na.rm=TRUE) # 19.15779
+min(pa_morph_fit_summary$ess_tail,na.rm=TRUE) # 191.0882
+max(pa_morph_fit_summary$rhat,na.rm=TRUE)  # 1.172273
 # all diagnostic_summary statistics were fine
-# As above, could set iterations to 1000 + ~2200 to achieve min ESS of 400.
+# For working purposes, min ESS of 100 is fine
+# For final model, min ESS of 400 is needed
+# As above, could set iterations to 1000*(400/19.158) to achieve min ESS of 400.
+# 1000*(400/19.158) = 20879. Set iterations to 21000 (could try increasing warmup??)
 
 
 ```
