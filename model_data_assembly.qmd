@@ -22,6 +22,10 @@ This document records the preparation of input data for Bayesian analysis macroi
 
 ### Environmental predictors
 
+#### Exploring EI and AF
+
+Effective imperviousness (EI) and attenuated forest cover (AF) are our two environmental predictors associated with anthropogenic land use change. 
+
 
 ```{r}
 # Open record of Spring 2021 samples source file.
@@ -112,13 +116,27 @@ DBI::dbDisconnect(db_mwbugs)
 
 ```
 
-### Collinearity between predictors
+### Pairwise spread of predictor data
+
+The spread of predictor data is well-distributed, with low collinearity between all predictors. The pair with the highest co-correlation was AF and MeanQ (R-sq = 0.38), which was still relatively low. DoR was strongly skewed and potentially 
 
 ```{r}
 
 sites_pairs <- as.data.frame(sites[,c("lai", "AF", "lmeanq", "lcarea", "dor")])[,1:5]
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- cor(x, y)^2
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+
 #sites_pairs
-pairs(sites_pairs)
+pairs(sites_pairs, upper.panel = panel.cor)
 
 ```
 
