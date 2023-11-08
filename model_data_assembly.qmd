@@ -18,16 +18,38 @@ wd <- "~/uomShare/wergStaff/tewilkins/morph_taxa_129_sites/data/"
 
 ## Introduction
 
-This document records the preparation of input data for Bayesian analysis macroinvertebrate assemblage composition in 128 sites across the Melbourne region, sampled in Spring 2021.
+This document records the preparation of input data for Bayesian analysis macroinvertebrate assemblage composition in 129 sites across the Melbourne region, sampled in Spring 2021.
 
 ### Environmental predictors
 
-#### Exploring EI and AF
+Compared to the Spring 2018 data, the Spring 2021 dataset has a greater number of sites included for which environmental data is available. This allows us to construct models from a larger set of environmental predictors than the Spring 2018 data. As a starting point, a rule of approximately 10 independent observations to each predictor is recommended to avoid overfitting [can't remember reference - some 90's book about multivariate statistics], which allows up to 13 environmental predictors to fit to samples from 129 sites. 
 
-Effective imperviousness (EI) and attenuated forest cover (AF) are our two environmental predictors associated with anthropogenic land use change. 
+Models developed for the Spring 2018 data included effective imperviousness (EI), attenuated forest cover (AF), their interaction (EI*AF), catchment area (CA), mean annual runoff (MeanQ), and the modal effect of runoff (MeanQ^2). EI and AF are our two environmental predictors associated with anthropogenic land use change, and interactions between these variables may influence inferences of the main effects of these predictors. In the Spring 2018 data, we found that marginal interactions between EI and AF were rare for single-taxon responses, though the predictor was still found to improve predictions made by the model as a whole. 
 
+### Spring 2021 data - opportunities and challenges
+
+In species-level models, AF was found to have a stronger effect than EI for more taxa than in the family-level models. The effects were also more varied within taxonomic groups, such as Leptoceridae and Oligochaeta. The riparian zone influences many structural aspects of a stream, such as channelisation and riffle habitat structure, and trophic aspects of a stream such as woody detritus inputs and suppression of oligotrophy [@poffLandscapeFiltersSpecies1997; @fierroEffectsLocalLanduse2017; @puseyImportanceRiparianZone2003]. The riparian zone has complex interactions with in-stream macroinvertebrates, and there is the potential to investigate this aspect further:
+
+1. Does the a modal response of forest cover improve prediction of macroinvertebrate taxon occurrences and assemblage responses?
+2. Do hydrographic predictors modulate the effects of forest cover on macroinvertebrate responses?
+3. Does riparian corridor distance influence macroinvertebrate occurrences?
+
+As we observed in the Spring 2018 data, the responses of species to AF were more varied than the effects of EI. The model structure only considers positive or negative correlations with AF, though such a specification ignores pre-colonial variation in forest cover that species 
+
+#### Spatial autocorrelation
+
+As the density of sites is much higher in the Spring 2021 data than the 2018 data, the effects of overland, downstream and upstream influences between sites are more likely to have an effect on macroinvertebrate assemblages. Spatial autocorrelation, the tendency for ecological communities to correlated depending on their spatial arrangements, is a metric that can be addressed in this dataset by addressing the following questions:
+
+1. Are assemblages influenced by their upstream communities?
+2. Are assemblages influenced by their downstream communities?
+3. Are assemblages influenced by overland spatial arrangements?
 
 ```{r}
+#| label: data_assembly
+#| eval: true
+#| echo: true
+
+
 # Open record of Spring 2021 samples source file.
 field_s21 <- as.data.frame(
   readxl::read_excel("~/uomShare/wergData/DNA_Barcoding/DNA barcoding samples processing Spr2021.xlsx"),
@@ -96,7 +118,7 @@ sites <- merge(sites, sites_env, by = "reach_v12")
 sites$lai <- log10(sites$AI*100 + 0.01)
 sites$lmeanq <- log10(sites$meanq)
 sites$lcarea <- log10(sites$carea)
-sites$ldor <- log10(sites$dor*100 + 0.01) # not sure if appropriate, but it helps the spread of data
+sites$ldor <- log10(sites$dor) # not sure if appropriate, but it helps the spread of data
 
 rm(sites_env)
 sites1 <- sites
@@ -118,9 +140,17 @@ DBI::dbDisconnect(db_mwbugs)
 
 ### Pairwise spread of predictor data
 
-The spread of predictor data is well-distributed, with low collinearity between all predictors. The pair with the highest co-correlation was AF and MeanQ (R-sq = 0.38), which was still relatively low. DoR was strongly skewed and potentially 
+The spread of predictor data is well-distributed, with low collinearity between all predictors. The pair with the highest co-correlation was AF and MeanQ (R-sq = 0.38), which was still relatively low, and is a ecologically sensible pattern to encounter (i.e., high rainfall areas are typically not low in forest cover, and low rainfall areas are typically not high in forest cover). DoR was strongly skewed and may present leverage issues from a small number of extreme observations.   
 
 ```{r}
+#| label: fig-pred_correlations
+#| eval: true
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-width: 7
+#| fig-height: 7
+#| fig-cap: "Correlation pair plots of the study sites for log-transformed catchment area (lcarea), log-transformed mean annual discharge depth (lmeanq), log-transformed effective imperviousness (lei), attenuated forest cover (af), and log degree of regulation (dor)"
 
 sites_pairs <- as.data.frame(sites[,c("lai", "AF", "lmeanq", "lcarea", "dor")])[,1:5]
 
@@ -140,22 +170,164 @@ pairs(sites_pairs, upper.panel = panel.cor)
 
 ```
 
-### Taxonomic decisions
-
-
-
 ### Assemble 'biota' into dataset
 
 ```{r}
+#| label: write_excel
+#| eval: false
+#| echo: true
+
 
 WriteXLS::WriteXLS(list(sites = sites, 
                         samples = samples_s21,
                         biota_morph = biota),
                   paste0(wd,"biota_for_models.xlsx"))
 
-
 ```
 
+### Model predictor sets from single-taxon responses (LME4)
+
+```{r}
+#| label: data_prep
+#| echo: true
+
+# NOTE THIS CHUNK is run below by sourcing its content at "compile_model_data.R"
+
+# Import sites, samples, and biota tables as a list
+data_list <- rio::import_list(paste0(wd,"biota_for_models.xlsx"))
+# Convert each table in data_list into a data.frame.
+list2env(data_list,globalenv())
+
+# sort samples list by sitecode (for ease of indexing/checking)
+samples <- samples[order(samples$sitecode),]
+# assign site_nos to sitecodes, and match to sample table
+sites$site_no <- 1:nrow(sites)
+samples$site_no <- sites$site_no[match(samples$sitecode,sites$sitecode)]
+
+# scale the predictor variables
+# keeping them as scaled objects for ease of back-transforming later
+I <- scale(sites$lai)
+F <- scale(sites$AF)
+Q <- scale(sites$lmeanq)
+C <- scale(sites$lcarea)
+D <- scale(sites$ldor)
+
+#### samples table for morph samples 
+samples_morph <- samples[samples$smpcode %in% unique(biota_morph$smpcode),]
+
+#### predictor matrix u for morph samples
+I_morph <- as.vector(I)[match(samples_morph$sitecode, sites$sitecode)]
+F_morph <- as.vector(F)[match(samples_morph$sitecode, sites$sitecode)]
+Q_morph <- as.vector(Q)[match(samples_morph$sitecode, sites$sitecode)]
+C_morph <- as.vector(C)[match(samples_morph$sitecode, sites$sitecode)]
+D_morph <- as.vector(D)[match(samples_morph$sitecode, sites$sitecode)]
+hab <- as.numeric(samples_morph$collection_method == "RBA edge (sweep)") 
+u_morph <- cbind(rep(1,nrow(samples_morph)),  # General intercept
+           I_morph,                 # Effective imperviousness
+           F_morph,                 # Attenuated Forest cover
+           I_morph * F_morph,       # Interaction betwen I and F
+           Q_morph,                 # mean annual runoff depth
+           Q_morph^2,               # square of Q for modal response
+           C_morph,                 # catchment area
+           D_morph,                 # flow stress
+           hab)                     # habitat (1 = edge, 0 = riffle)
+
+#### count matrix for morph_ab model
+# check all counts are integers sum(biota_morph_ab$count %% 1 > 0) # 0, all good
+ab_morph <- with(biota_morph, ct(smpcode, taxoncode, count))
+# ensure c and u rows are ordered the same way
+ab_morph <- ab_morph[match(samples_morph$smpcode,row.names(ab_morph)),]
+
+#### presence_absence matrix for morph samples 
+pa_morph <- ab_morph
+pa_morph[pa_morph > 0] <- 1
+
+#### subsample fraction matrix (applies to both c_morph_ab and pa_morph)
+s_morph <- pa_morph
+for(i in 1:nrow(s_morph)){
+  s_morph[i,] <- samples_morph$subsample_perc[samples_morph$smpcode == 
+                                                row.names(s_morph)[i]]/100
+}
+# adjust coarsepick subsample fractions to 1
+coarsepicks <- biota_morph[biota_morph$coarsepick == 1,]
+for(i in 1:nrow(coarsepicks)){
+  s_morph[row.names(s_morph) == coarsepicks$smpcode[i],
+          coarsepicks$taxoncode[i]] <- 1
+}
+
+ab_morph_data <- list(n_obs = nrow(ab_morph), # no. samples
+                    n_pred = ncol(u_morph),       # no. predictors
+                    n_taxa = ncol(ab_morph),  # no. taxa
+                    n_site = nrow(sites),       # no. sites
+                    u = as.matrix(u_morph),       # predictor model matrix
+                    c = as.matrix(ab_morph), # taxa pa matrix
+                    s = as.matrix(s_morph),  # subsample proportion for each obs
+                    site = samples_morph$site_no) # site number for each obs
+
+pa_morph_data <- list(n_obs = nrow(pa_morph), # no. samples
+                    n_pred = ncol(u_morph),       # no. predictors
+                    n_taxa = ncol(pa_morph),  # no. taxa
+                    n_site = nrow(sites),       # no. sites
+                    u = as.matrix(u_morph),       # predictor model matrix
+                    pa = as.matrix(pa_morph), # taxa pa matrix
+                    s = as.matrix(s_morph),  # subsample proportion for each obs
+                    site = samples_morph$site_no) # site number for each obs
+
+# lme4:
+
+taxoncodes <- colnames(ab_morph)
+prevalence <- apply(ab_morph, 2, FUN = function(x) {sum(x > 1)})
+prev_def <- data.frame(taxoncode = names(prevalence),
+                       prevalence = prevalence)
+
+# these seem incorrectly labeled, but not important now.
+
+# QC340000 - 125/258
+# QP030000 - 138/258
+# QE060000 - 156/258
 
 
 
+
+QC34_df <- data.frame(taxoncode = "QE060000",
+                      smpcode = rownames(ab_morph)[match(rownames(ab_morph), samples_morph$smpcode)], 
+                      abundance = round(ab_morph[match(rownames(ab_morph), samples_morph$smpcode),colnames(ab_morph) == "QC340000"]),
+                      I = as.vector(I)[match(samples_morph$sitecode, sites$sitecode)],
+                      F = as.vector(F)[match(samples_morph$sitecode, sites$sitecode)],
+                      Q = as.vector(Q)[match(samples_morph$sitecode, sites$sitecode)],
+                      C = as.vector(C)[match(samples_morph$sitecode, sites$sitecode)],
+                      D = as.vector(D)[match(samples_morph$sitecode, sites$sitecode)],
+                      site_no = sites$site_no[match(samples_morph$sitecode, sites$sitecode)])
+
+QP03_df <- data.frame(taxoncode = "QP030000",
+                      smpcode = rownames(ab_morph)[match(rownames(ab_morph), samples_morph$smpcode)], 
+                      abundance = round(ab_morph[match(rownames(ab_morph), samples_morph$smpcode),colnames(ab_morph) == "QP030000"]),
+                      I = as.vector(I)[match(samples_morph$sitecode, sites$sitecode)],
+                      F = as.vector(F)[match(samples_morph$sitecode, sites$sitecode)],
+                      Q = as.vector(Q)[match(samples_morph$sitecode, sites$sitecode)],
+                      C = as.vector(C)[match(samples_morph$sitecode, sites$sitecode)],
+                      D = as.vector(D)[match(samples_morph$sitecode, sites$sitecode)],
+                      site_no = sites$site_no[match(samples_morph$sitecode, sites$sitecode)])
+
+QE06_df <- data.frame(taxoncode = "QE060000",
+                      smpcode = rownames(ab_morph)[match(rownames(ab_morph), samples_morph$smpcode)], 
+                      abundance = round(ab_morph[match(rownames(ab_morph), samples_morph$smpcode),colnames(ab_morph) == "QE060000"]),
+                      I = as.vector(I)[match(samples_morph$sitecode, sites$sitecode)],
+                      F = as.vector(F)[match(samples_morph$sitecode, sites$sitecode)],
+                      Q = as.vector(Q)[match(samples_morph$sitecode, sites$sitecode)],
+                      C = as.vector(C)[match(samples_morph$sitecode, sites$sitecode)],
+                      D = as.vector(D)[match(samples_morph$sitecode, sites$sitecode)],
+                      site_no = sites$site_no[match(samples_morph$sitecode, sites$sitecode)])
+
+lme_df <- rbind(QC34_df, QP03_df, QE06_df)
+
+library(lme4)
+
+QC34_lm <- glmer(formula = abundance ~ I + F + I*F + C + Q + Q^2 + D, data = QC34_df, family = poisson(link = "log"))
+QP03_lm <- glmer(formula = abundance ~ I + F + I*F + C + Q + Q^2 + D + (1 | site_no), data = QP03_df, family = poisson(link = "log"))
+QE06_lm <- glmer(formula = abundance ~ I + F + I*F + C + Q + Q^2 + D + (1 | site_no), data = QE06_df, family = poisson(link = "log"))
+
+summary(QC34_lm)
+summary(QP03_lm)
+summary(QE06_lm)
+```
