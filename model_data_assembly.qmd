@@ -11,7 +11,9 @@ editor: visual
 
 requiredPackages <- c("readxl","tidyverse", "DBI")
 lapply(requiredPackages, FUN = require, character.only = TRUE)
-source("https://tools.thewerg.unimelb.edu.au/documents/misc/bugDatabaseFunctions.R")
+#  source("https://tools.thewerg.unimelb.edu.au/documents/misc/bugDatabaseFunctions.R")
+## CW says: This is the more up-to-date bug database functions that you should use.
+source("https://tools.thewerg.unimelb.edu.au/data/mwbugs/bug_database_functions.R")
 source("https://tools.thewerg.unimelb.edu.au/data/mwstr_v13/mwstr_network_functions.R")
 wd <- "~/uomShare/wergStaff/tewilkins/morph_taxa_129_sites/data/"
 ```
@@ -22,33 +24,32 @@ This document records the preparation of input data for Bayesian analysis macroi
 
 ### Environmental predictors
 
-Compared to the Spring 2018 data, the Spring 2021 dataset has a greater number of sites included for which environmental data is available. This allows us to construct models from a larger set of environmental predictors than the Spring 2018 data. As a starting point, a rule of approximately 10 independent observations to each predictor is recommended to avoid overfitting [can't remember reference - some 90's book about multivariate statistics], which allows up to 13 environmental predictors to fit to samples from 129 sites. 
+Compared to the Spring 2018 data, the Spring 2021 dataset has a greater number of sites included for which environmental data is available. This allows us to construct models from a larger set of environmental predictors than the Spring 2018 data. As a starting point, a rule of approximately 10 independent observations to each predictor is recommended to avoid overfitting \[can't remember reference - some 90's book about multivariate statistics\], which allows up to 13 environmental predictors to fit to samples from 129 sites.
 
-Models developed for the Spring 2018 data included effective imperviousness (EI), attenuated forest cover (AF), their interaction (EI*AF), catchment area (CA), mean annual runoff (MeanQ), and the modal effect of runoff (MeanQ^2). EI and AF are our two environmental predictors associated with anthropogenic land use change, and interactions between these variables may influence inferences of the main effects of these predictors. In the Spring 2018 data, we found that marginal interactions between EI and AF were rare for single-taxon responses, though the predictor was still found to improve predictions made by the model as a whole. 
+Models developed for the Spring 2018 data included effective imperviousness (EI), attenuated forest cover (AF), their interaction (EI\*AF), catchment area (CA), mean annual runoff (MeanQ), and the modal effect of runoff (MeanQ\^2). EI and AF are our two environmental predictors associated with anthropogenic land use change, and interactions between these variables may influence inferences of the main effects of these predictors. In the Spring 2018 data, we found that marginal interactions between EI and AF were rare for single-taxon responses, though the predictor was still found to improve predictions made by the model as a whole.
 
 ### Spring 2021 data - opportunities and challenges
 
 In species-level models, AF was found to have a stronger effect than EI for more taxa than in the family-level models. The effects were also more varied within taxonomic groups, such as Leptoceridae and Oligochaeta. The riparian zone influences many structural aspects of a stream, such as channelisation and riffle habitat structure, and trophic aspects of a stream such as woody detritus inputs and suppression of oligotrophy [@poffLandscapeFiltersSpecies1997; @fierroEffectsLocalLanduse2017; @puseyImportanceRiparianZone2003]. The riparian zone has complex interactions with in-stream macroinvertebrates, and there is the potential to investigate this aspect further:
 
-1. Does the a modal response of forest cover improve prediction of macroinvertebrate taxon occurrences and assemblage responses?
-2. Do hydrographic predictors modulate the effects of forest cover on macroinvertebrate responses?
-3. Does riparian corridor distance influence macroinvertebrate occurrences?
+1.  Does the a modal response of forest cover improve prediction of macroinvertebrate taxon occurrences and assemblage responses?
+2.  Do hydrographic predictors modulate the effects of forest cover on macroinvertebrate responses?
+3.  Does riparian corridor distance influence macroinvertebrate occurrences?
 
-As we observed in the Spring 2018 data, the responses of species to AF were more varied than the effects of EI. The model structure only considers positive or negative correlations with AF, though such a specification ignores pre-colonial variation in forest cover that species 
+As we observed in the Spring 2018 data, the responses of species to AF were more varied than the effects of EI. The model structure only considers positive or negative correlations with AF, though such a specification ignores pre-colonial variation in forest cover that species
 
 #### Spatial autocorrelation
 
 As the density of sites is much higher in the Spring 2021 data than the 2018 data, the effects of overland, downstream and upstream influences between sites are more likely to have an effect on macroinvertebrate assemblages. Spatial autocorrelation, the tendency for ecological communities to correlated depending on their spatial arrangements, is a metric that can be addressed in this dataset by addressing the following questions:
 
-1. Are assemblages influenced by their upstream communities?
-2. Are assemblages influenced by their downstream communities?
-3. Are assemblages influenced by overland spatial arrangements?
+1.  Are assemblages influenced by their upstream communities?
+2.  Are assemblages influenced by their downstream communities?
+3.  Are assemblages influenced by overland spatial arrangements?
 
 ```{r}
 #| label: data_assembly
 #| eval: true
 #| echo: true
-
 
 # Open record of Spring 2021 samples source file.
 field_s21 <- as.data.frame(
@@ -108,11 +109,16 @@ samples <- samples[samples$sitecode %in% sample_lookup$sitecode,]
 biota <- DBI::dbReadTable(db_mwbugs,"biota")
 biota <- biota[biota$smpcode %in% samples$smpcode,]
 
-# Read env and site data:
-sites_env <- DBI::dbGetQuery(db_mwstr, "SELECT cat_env.site, cat_env.reach, cat_env.ei_2022, cat_env.af_2022, cat_env.meanq_mm, subcs.carea_km2, cat_env.dor FROM cat_env JOIN subcs ON cat_env.site = subcs.site")
+# Read env and site data (CW edit over old version)
+db_mwstr <- RPostgres::dbConnect(drv = RPostgres::Postgres(), dbname = "mwstr")
+sites_env <- DBI::dbGetQuery(db_mwstr, 
+                             paste0("SELECT cat_env.site, cat_env.reach, cat_env.ei_2022, ",
+                             "cat_env.af_2022, cat_env.meanq_mm, subcs.carea_km2, cat_env.dor ",
+                             "FROM cat_env JOIN subcs ON cat_env.site = subcs.site ",
+                             "WHERE cat_env.reach IN ('", paste(sites$reach_v12, collapse = "', '"), "');"))
 names(sites_env) <- c("site","reach_v12","AI","AF_r","meanq","carea", "dor")
 
-sites <- merge(sites, sites_env, by = "reach_v12")
+sites <- cbind(sites, sites_env[match(sites$reach_v12,sites_env$reach),-c(1,2)])
 
 # Recalculate log10-transformed predictors
 sites$lai <- log10(sites$AI*100 + 0.01)
@@ -140,7 +146,7 @@ DBI::dbDisconnect(db_mwbugs)
 
 ### Pairwise spread of predictor data
 
-The spread of predictor data is well-distributed, with low collinearity between all predictors. The pair with the highest co-correlation was AF and MeanQ (R-sq = 0.38), which was still relatively low, and is a ecologically sensible pattern to encounter (i.e., high rainfall areas are typically not low in forest cover, and low rainfall areas are typically not high in forest cover). DoR was strongly skewed and may present leverage issues from a small number of extreme observations.   
+The spread of predictor data is well-distributed, with low collinearity between all predictors. The pair with the highest co-correlation was AF and MeanQ (R-sq = 0.38), which was still relatively low, and is a ecologically sensible pattern to encounter (i.e., high rainfall areas are typically not low in forest cover, and low rainfall areas are typically not high in forest cover). DoR was strongly skewed and may present leverage issues from a small number of extreme observations.
 
 ```{r}
 #| label: fig-pred_correlations
