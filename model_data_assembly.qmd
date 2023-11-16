@@ -2,6 +2,7 @@
 title: "Model data assembly for morhpological dataset (129 sites)"
 format: docx
 editor: visual
+bibliography: references.bib
 ---
 
 ```{r setup}
@@ -24,7 +25,7 @@ This document records the preparation of input data for Bayesian analysis macroi
 
 ### Environmental predictors
 
-Compared to the Spring 2018 data, the Spring 2021 dataset has a greater number of sites included for which environmental data is available. This allows us to construct models from a larger set of environmental predictors than the Spring 2018 data. As a starting point, a rule of approximately 10 independent observations to each predictor is recommended to avoid overfitting \[can't remember reference - some 90's book about multivariate statistics\], which allows up to 13 environmental predictors to fit to samples from 129 sites.
+Compared to the Spring 2018 data, the Spring 2021 dataset has a greater number of sites included for which environmental data is available. This allows us to construct models from a larger set of environmental predictors than the Spring 2018 data. As a starting point, a rule of approximately 10 independent observations to each predictor is recommended to avoid overfitting \[can't remember reference - some 90's book about multivariate statistics\], which permits us to include up to 13 environmental predictors to fit to samples from 129 sites.
 
 Models developed for the Spring 2018 data included effective imperviousness (EI), attenuated forest cover (AF), their interaction (EI\*AF), catchment area (CA), mean annual runoff (MeanQ), and the modal effect of runoff (MeanQ\^2). EI and AF are our two environmental predictors associated with anthropogenic land use change, and interactions between these variables may influence inferences of the main effects of these predictors. In the Spring 2018 data, we found that marginal interactions between EI and AF were rare for single-taxon responses, though the predictor was still found to improve predictions made by the model as a whole.
 
@@ -36,41 +37,53 @@ In species-level models, AF was found to have a stronger effect than EI for more
 2.  Do hydrographic predictors modulate the effects of forest cover on macroinvertebrate responses?
 3.  Does riparian corridor distance influence macroinvertebrate occurrences?
 
-As we observed in the Spring 2018 data, the responses of species to AF were more varied than the effects of EI. The model structure only considers positive or negative correlations with AF, though such a specification ignores pre-colonial variation in forest cover that species
-
 ### Interactions with EI
 
-#### EI * MeanQ
+#### EI \* MeanQ
 
-The mechanistic basis of ecological degradation as caused by sealed impervious surfaces (which drain directly into an environmental stream) is that surfaces act as both sites for pollutant build-up and efficient channels for stormwater to transport the pollutants [e.g., Walsh et al 2005; Allan 2004]. Therefore, it is reasonable to expect some causal relationship between EI and MeanQ such that the effects of high EI might be made more deleterious by increased transport of pollutants through high rainfall runoff.
+The mechanistic basis of ecological degradation resulting from sealed impervious surfaces (which drain directly into an environmental stream) is evident from constructed surfaces acting as sites for pollutant accumulation, followed by stormwater transport of these pollutants through hydrologically efficient channels [e.g., @walshUrbanStreamSyndrome2005; @allan2004]. Therefore, it is reasonable to expect a causal relationship between EI and MeanQ such that the effects of high EI might be more deleterious with increased transport of pollutants, which occurs through high rainfall runoff.
 
-Question: Do invertebrate responses to EI differ between high and low MeanQ? 
+Question: Do invertebrate responses to EI differ between high and low MeanQ?
 
-#### EI * EV
+#### EI \* EV
 
-Elevation could be useful as a proxy for mean annual air temperature [add citation]. We could use this relationship to infer the effects of land use change on alpine species, or more broadly, rising air temperature (such as climate change or urban heat island effects) on invertebrate occurrences. However, such inferences may also be confounded by a tendency for urban developments to be built on flat, low-elevation catchments, such as floodplains (e.g., southeast Melbourne) and basalt flats (e.g., western Melbourne).
+Elevation could be useful as a proxy for mean annual air temperature \[add citation\]. We could use this relationship to infer the effects of land use change on alpine species, or more broadly, rising air temperature (such as climate change or urban heat island effects) on invertebrate occurrences. However, such inferences may also be confounded by a tendency for urban developments to be built on flat, low-elevation catchments, such as floodplains (e.g., southeast Melbourne) and basalt flats (e.g., western Melbourne).
 
 Question: Do invertebrate responses to EI differ at low and high elevations?
 
+#### EI \* CA
+
+The size of a catchment influences the amount of organic matter and sediments transported to a stream through overland transport channels, predominantly through impervious surfaces. Larger catchments with high impervious cover are more likely to have a stronger effect on stream ecosystems than small catchments, as the volume of organic matter and sediments will be greater than small catchments, relative to stream size.
+
+Question: Do invertebrate responses to EI differ between streams with small and large surrounding catchments?
+
 ### Interactions with AF
 
-#### AF * MeanQ
+#### AF \* MeanQ
 
-The basis behind ecological degradation in response to forest cover loss is similar to that of imperviousness, as riparian and catchment vegetation maintain stream health by intercepting sediment and pollutant runoff [pusey et al., 2003]. However, treating 
+The basis behind ecological degradation in response to forest cover loss is similar to that of imperviousness, as riparian and catchment vegetation maintain stream health by intercepting sediment and pollutant runoff [@puseyImportanceRiparianZone2003]. However, the processes governing this effect differ to the EI \* MeanQ interaction; species adaptations to forest cover and rainfall are likely to vary naturally, regardless of anthropogenic effects. Consequently, the interaction of AF and MeanQ could model species' responses to loss of forest cover, modulated by rainfall, but also species' responses to a naturally occurring environment. In either case the interaction is informative, and can be further contextualized by the species' response to EI and other environmental variables.
 
-#### AF * DoR
+Question: How does mean annual runoff influence the response of species' occurrences to forest cover?
 
-Given that most reservoirs will be 
+Further thoughts: could difference in AF between 1750 and 2022 data be used to identify species responses to forest cover loss? If so, forest cover difference might be a better predictor to make inferences on anthropogenically-driven land use change.
 
-#### AF * EV
+#### AF \* EV
 
+Many studies have linked forest clearing to increasing stream temperatures \[Gray & Edington, 1969; ...others etc\]. Elevation as a proxy for stream temperature has advantages and disadvantages with respect to forest cover; direct effects of forest cover on stream temperatures are not present with elevation as a proxy, which allows us to infer responses from each predictor as independent from the other. As such, any interaction between forest cover and elevation is more likely to represent biologically-relevant interactions rather than autocorrelation from dependencies in the variables (i.e., loss of forest cover directly causing stream temperature increases). One *disadvantage* is the causal link between temperature and forest cover is not the same as for elevation, and the relationship is probably not as reliable or realistic.
 
- 
-#### AF * AF (Modal response)
+Question: Do invertebrate responses to AF differ at low and high elevations?
 
-By correlating species occurrences to environmental gradients, the relationships of species' responses to predictors are implied to be linear, optimising the response at either 0% or 100%. For EI, there is no ad hoc reason to believe such a relationship would be non-linear as impervious surfaces are a product of urban growth and would not have varied pre-colonisation. However, forest cover would likely have varied spatially pre-colonisation, and invertebrates may have preferences for streams within a range (e.g., a species with a positive response to AF may have an optimal response somewhere closer to 80%).
+#### AF \* AF (Modal response)
+
+As we observed in the Spring 2018 data, the responses of species to AF were more varied than the effects of EI. The model structure only considers positive or negative correlations with AF, though such a specification ignores pre-colonial variation in forest cover. By linearly correlating species occurrences to environmental gradients, the relationships of species' responses to predictors are implied to be trending towards either minimum or maximum values in the predictor data. However, invertebrates may have preferences for forested streams somewhere between 0% and 100% (e.g., a species with a positive response to AF may have an optimal response somewhere closer to 80%).
 
 Question: Does the a modal response of forest cover improve prediction of macroinvertebrate taxon occurrences and assemblage responses?
+
+#### (EI \* AF) \* MeanQ
+
+The interaction between EI and AF indicates the joint effect of multiple anthropogenic stressors. Mean annual runoff (or its modal effect) is also expected to influence the effect of each predictor, due to transport of accumulated sediments through sealed impervious surfaces *and* loss of overland sediment capture by riparian vegetation. Thus, the interactive effect of imperviousness and forest cover is also likely to be modulated by mean annual runoff (e.g., in high-rainfall areas, the difference in effects of high imperviousness when forest cover is either high or low may not be so present in low-rainfall areas).
+
+Question: Does MeanQ influence the strength of the interactive effects of anthropogenic predictors?
 
 #### Spatial autocorrelation
 
@@ -192,7 +205,7 @@ The spread of predictor data is well-distributed, with low collinearity between 
 #| fig-height: 7
 #| fig-cap: "Correlation pair plots of the study sites for log-transformed catchment area (lcarea), log-transformed mean annual discharge depth (lmeanq), log-transformed effective imperviousness (lei), attenuated forest cover (af), and log degree of regulation (dor)"
 
-sites_pairs <- as.data.frame(sites[,c("lai", "AF", "lmeanq", "lcarea", "dor")])[,1:5]
+sites_pairs <- as.data.frame(sites[,c("lai", "AF", "lmeanq", "lcarea", "dor", "ev")])[,1:5]
 
 panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
 {
