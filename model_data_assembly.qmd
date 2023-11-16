@@ -38,6 +38,40 @@ In species-level models, AF was found to have a stronger effect than EI for more
 
 As we observed in the Spring 2018 data, the responses of species to AF were more varied than the effects of EI. The model structure only considers positive or negative correlations with AF, though such a specification ignores pre-colonial variation in forest cover that species
 
+### Interactions with EI
+
+#### EI * MeanQ
+
+The mechanistic basis of ecological degradation as caused by sealed impervious surfaces (which drain directly into an environmental stream) is that surfaces act as both sites for pollutant build-up and efficient channels for stormwater to transport the pollutants [e.g., Walsh et al 2005; Allan 2004]. Therefore, it is reasonable to expect some causal relationship between EI and MeanQ such that the effects of high EI might be made more deleterious by increased transport of pollutants through high rainfall runoff.
+
+Question: Do invertebrate responses to EI differ between high and low MeanQ? 
+
+#### EI * EV
+
+Elevation could be useful as a proxy for mean annual air temperature [add citation]. We could use this relationship to infer the effects of land use change on alpine species, or more broadly, rising air temperature (such as climate change or urban heat island effects) on invertebrate occurrences. However, such inferences may also be confounded by a tendency for urban developments to be built on flat, low-elevation catchments, such as floodplains (e.g., southeast Melbourne) and basalt flats (e.g., western Melbourne).
+
+Question: Do invertebrate responses to EI differ at low and high elevations?
+
+### Interactions with AF
+
+#### AF * MeanQ
+
+The basis behind ecological degradation in response to forest cover loss is similar to that of imperviousness, as riparian and catchment vegetation maintain stream health by intercepting sediment and pollutant runoff [pusey et al., 2003]. However, treating 
+
+#### AF * DoR
+
+Given that most reservoirs will be 
+
+#### AF * EV
+
+
+ 
+#### AF * AF (Modal response)
+
+By correlating species occurrences to environmental gradients, the relationships of species' responses to predictors are implied to be linear, optimising the response at either 0% or 100%. For EI, there is no ad hoc reason to believe such a relationship would be non-linear as impervious surfaces are a product of urban growth and would not have varied pre-colonisation. However, forest cover would likely have varied spatially pre-colonisation, and invertebrates may have preferences for streams within a range (e.g., a species with a positive response to AF may have an optimal response somewhere closer to 80%).
+
+Question: Does the a modal response of forest cover improve prediction of macroinvertebrate taxon occurrences and assemblage responses?
+
 #### Spatial autocorrelation
 
 As the density of sites is much higher in the Spring 2021 data than the 2018 data, the effects of overland, downstream and upstream influences between sites are more likely to have an effect on macroinvertebrate assemblages. Spatial autocorrelation, the tendency for ecological communities to correlated depending on their spatial arrangements, is a metric that can be addressed in this dataset by addressing the following questions:
@@ -110,13 +144,13 @@ biota <- DBI::dbReadTable(db_mwbugs,"biota")
 biota <- biota[biota$smpcode %in% samples$smpcode,]
 
 # Read env and site data (CW edit over old version)
-db_mwstr <- RPostgres::dbConnect(drv = RPostgres::Postgres(), dbname = "mwstr")
+# db_mwstr <- RPostgres::dbConnect(drv = RPostgres::Postgres(), dbname = "mwstr")
 sites_env <- DBI::dbGetQuery(db_mwstr, 
                              paste0("SELECT cat_env.site, cat_env.reach, cat_env.ei_2022, ",
-                             "cat_env.af_2022, cat_env.meanq_mm, subcs.carea_km2, cat_env.dor ",
-                             "FROM cat_env JOIN subcs ON cat_env.site = subcs.site ",
+                             "cat_env.af_2022, cat_env.meanq_mm, subcs.carea_km2, cat_env.dor, subc_env.elev_asl_m ",
+                             "FROM cat_env JOIN subcs ON cat_env.site = subcs.site JOIN subc_env ON cat_env.site = subc_env.site ",
                              "WHERE cat_env.reach IN ('", paste(sites$reach_v12, collapse = "', '"), "');"))
-names(sites_env) <- c("site","reach_v12","AI","AF_r","meanq","carea", "dor")
+names(sites_env) <- c("site","reach_v12","AI","AF_r","meanq","carea", "dor", "ev")
 
 sites <- cbind(sites, sites_env[match(sites$reach_v12,sites_env$reach),-c(1,2)])
 
