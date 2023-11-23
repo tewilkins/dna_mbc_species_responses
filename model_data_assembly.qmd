@@ -29,6 +29,32 @@ Compared to the Spring 2018 data, the Spring 2021 dataset has a greater number o
 
 Models developed for the Spring 2018 data included effective imperviousness (EI), attenuated forest cover (AF), their interaction (EI\*AF), catchment area (CA), mean annual runoff (MeanQ), and the modal effect of runoff (MeanQ\^2). EI and AF are our two environmental predictors associated with anthropogenic land use change, and interactions between these variables may influence inferences of the main effects of these predictors. In the Spring 2018 data, we found that marginal interactions between EI and AF were rare for single-taxon responses, though the predictor was still found to improve predictions made by the model as a whole.
 
+#### Effective imperviousness (EI), Attenuated Forest Cover (AF) and Degree of Regulation (DoR)
+
+EI, AF and DoR are environmental variables that manifest through anthropogenic land use activities [@walshUrbanStreamSyndrome2005; @allan2004].
+
+<!--# EI -->
+
+EI is the proportion of a catchment covered by sealed impervious surfaces (e.g., concrete, asphalt and tile roofing) that has direct drainage to a stream. As these surfaces only include anthropogenic
+
+<!--# AF -->
+
+AF is the proportion of forest cover
+
+<!--# DoR -->
+
+DoR is the
+
+#### Mean Annual Runoff (MeanQ), Catchment Area (CA) and Elevation (EV)
+
+MeanQ, CA and EV are hydrographic variables that influence macroinvertebrate assmeblages
+
+<!--# MeanQ -->
+
+<!--# CA -->
+
+<!--# EV -->
+
 ### Spring 2021 data - opportunities and challenges
 
 In species-level models, AF was found to have a stronger effect than EI for more taxa than in the family-level models. The effects were also more varied within taxonomic groups, such as Leptoceridae and Oligochaeta. The riparian zone influences many structural aspects of a stream, such as channelisation and riffle habitat structure, and trophic aspects of a stream such as woody detritus inputs and suppression of oligotrophy [@poffLandscapeFiltersSpecies1997; @fierroEffectsLocalLanduse2017; @puseyImportanceRiparianZone2003]. The riparian zone has complex interactions with in-stream macroinvertebrates, and there is the potential to investigate this aspect further:
@@ -85,6 +111,8 @@ The interaction between EI and AF indicates the joint effect of multiple anthrop
 
 Question: Does MeanQ influence the strength of the interactive effects of anthropogenic predictors?
 
+### Visualization and analysis through backdoor criterion
+
 #### Spatial autocorrelation
 
 As the density of sites is much higher in the Spring 2021 data than the 2018 data, the effects of overland, downstream and upstream influences between sites are more likely to have an effect on macroinvertebrate assemblages. Spatial autocorrelation, the tendency for ecological communities to correlated depending on their spatial arrangements, is a metric that can be addressed in this dataset by addressing the following questions:
@@ -95,8 +123,8 @@ As the density of sites is much higher in the Spring 2021 data than the 2018 dat
 
 ```{r}
 #| label: data_assembly
-#| eval: true
-#| echo: true
+#| eval: false
+#| echo: false
 
 # Open record of Spring 2021 samples source file.
 field_s21 <- as.data.frame(
@@ -154,7 +182,7 @@ samples <- samples[samples$sitecode %in% sample_lookup$sitecode,]
 # Proceed with 128 for now (and rerun this script when JKS data is delivered)
 
 biota <- DBI::dbReadTable(db_mwbugs,"biota")
-biota <- biota[biota$smpcode %in% samples$smpcode,]
+biota <- biota[biota$smpcode %in% samples_s21$smpcode,]
 
 # Read env and site data (CW edit over old version)
 # db_mwstr <- RPostgres::dbConnect(drv = RPostgres::Postgres(), dbname = "mwstr")
@@ -178,16 +206,75 @@ sites1 <- sites
 
 # Recalculate AF by site (rather than reach - see https://shiny-water.science.unimelb.edu.au/mwstr_manual/c6-trees.html for explanation and calculations)
 sites$AF <- NA
+sites$AF_1750 <- NA
 af_data <- prepare_af_site_data(db_mwstr, "/servers/shiny-server/data/mwstr_v13") # takes ~ 2 min
 system.time(
   for(i in 1:nrow(sites)){
-  sites$AF[i] <- af_site(sites$reach_v12[i], af_data)[4]   # third element is af_2018
+  sites$AF[i] <- af_site(sites$reach_v12[i], af_data)[4]   # fourth element is af_2022
+  sites$AF_1750[i] <- af_site(sites$reach_v12[i], af_data)[1]   # first element is af_1750
   }
-) # ~ 17 mins
+) # ~ 36 mins for 2022 and 1750 data.
+
+WriteXLS::WriteXLS(list(sites = sites, 
+                        samples = samples_s21,
+                        biota_morph = biota),
+                  paste0(wd,"biota_for_models.xlsx"))
 
 # disconnect databases:
 DBI::dbDisconnect(db_mwstr)
 DBI::dbDisconnect(db_mwbugs)
+
+```
+
+### Inspecting environmental predictors
+
+#### AF 1750 to 2022
+
+```{r}
+#| label: fig-env_af
+#| eval: true
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-width: 7
+#| fig-height: 7
+#| fig-cap: "Histograms of Attenuated Forest data for the years 2022 (current), 1750 (pre-industrial), and their differences from sites in Melbourne. Retrieved from the Melbourne Water Stream Network Database [Walsh 2023]."
+
+
+layout(matrix(c(4,1,2,3,
+                0,5,5,5), 2, 4, byrow=TRUE), widths = c(2,8,8,8), heights = c(10,2))
+par(mar = c(2,2,1,1))
+
+sites$AF_diff <- sites$AF_1750 - sites$AF
+
+hist(sites$AF)
+hist(sites$AF_1750)
+hist(sites$AF_diff)
+
+par(mar = c(0,0,0,0))
+plot.new(); title(ylab = "Freq", line = -2, cex.lab = 1.5)
+plot.new(); title(xlab =  "AF (%)", line = -2, cex.lab = 1.5)
+```
+
+```{r}
+#| label: fig-env_dor
+#| eval: true
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-width: 7
+#| fig-height: 7
+#| fig-cap: "Histograms of various transformations for Degree of Regulation (Dor) data, retrieved from the Melbourne Water Stream Network Database [Walsh 2023]."
+
+
+
+data_list <- rio::import_list(paste0(wd,"biota_for_models.xlsx"))
+
+hist(sites$AF)
+hist(sites$lai)
+hist(sites$ev)
+hist(sqrt(sites$dor))
+
 
 ```
 
@@ -205,7 +292,7 @@ The spread of predictor data is well-distributed, with low collinearity between 
 #| fig-height: 7
 #| fig-cap: "Correlation pair plots of the study sites for log-transformed catchment area (lcarea), log-transformed mean annual discharge depth (lmeanq), log-transformed effective imperviousness (lei), attenuated forest cover (af), and log degree of regulation (dor)"
 
-sites_pairs <- as.data.frame(sites[,c("lai", "AF", "lmeanq", "lcarea", "dor", "ev")])[,1:5]
+sites_pairs <- as.data.frame(sites[,c("lai", "AF", "lmeanq", "lcarea", "dor", "ev")])[,1:6]
 
 panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
 {
@@ -223,28 +310,13 @@ pairs(sites_pairs, upper.panel = panel.cor)
 
 ```
 
-### Assemble 'biota' into dataset
-
-```{r}
-#| label: write_excel
-#| eval: false
-#| echo: true
-
-
-WriteXLS::WriteXLS(list(sites = sites, 
-                        samples = samples_s21,
-                        biota_morph = biota),
-                  paste0(wd,"biota_for_models.xlsx"))
-
-```
-
 ### Model predictor sets from single-taxon responses (LME4)
 
 ```{r}
 #| label: data_prep
 #| echo: true
+#| eval: false
 
-# NOTE THIS CHUNK is run below by sourcing its content at "compile_model_data.R"
 
 # Import sites, samples, and biota tables as a list
 data_list <- rio::import_list(paste0(wd,"biota_for_models.xlsx"))
